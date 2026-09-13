@@ -34,3 +34,13 @@ def test_baseline_zero_balance_user_is_currently_skipped():
     ids = [u['id'] for u in result]
     assert 4 not in ids
     assert len(result) == 2
+
+def test_validate_zero_balance_user_included_with_net_zero():
+    result = run(1)
+    ids = [u['id'] for u in result]
+    assert 4 in ids
+    assert len(result) == 3
+
+    u4 = next(u for u in result if u['id'] == 4)
+    assert u4['tax'] == 0
+    assert u4['net'] == 0
