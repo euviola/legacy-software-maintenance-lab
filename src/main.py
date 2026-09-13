@@ -23,7 +23,9 @@ def run(t, d=None):
                     u['net'] = u['balance'] - tmp
                     r.append(u)
                 elif u['balance'] == 0:
-                    pass  # skip zero balance
+                    u['tax'] = 0
+                    u['net'] = 0
+                    r.append(u)
                 else:
                     # negative balance - log somewhere
                     print("WARN: negative balance for user " + str(u['id']))
