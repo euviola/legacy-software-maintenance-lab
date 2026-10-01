@@ -6,7 +6,7 @@ import sys
 from src.process import proc
 from src.db import get_data, save
 from src.report import make_report
-from src.utils import calc, fmt
+from src.utils import calc
 
 
 def run(t, d=None):
