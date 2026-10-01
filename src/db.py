@@ -103,11 +103,11 @@ class DataManager:
     def clear_cache(self):
         self.cache = {}
 
-    def validate(self, data, type):
+    def validate(self, data, data_type):
         # TODO: add proper validation (CR-045)
         if data is None:
             return False
-        if type == "user":
+        if data_type == "user":
             return "id" in data and "name" in data
         return True
 
