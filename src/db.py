@@ -42,7 +42,7 @@ class DataManager:
         # try to load from file
         path = DB_PATH + what + ".json"
         if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, "r") as f:
                 d = json.load(f)
                 self.cache[what] = d
                 return d
@@ -103,11 +103,11 @@ class DataManager:
     def clear_cache(self):
         self.cache = {}
 
-    def validate(self, data, data_type):
+    def validate(self, data, type):
         # TODO: add proper validation (CR-045)
         if data is None:
             return False
-        if data_type == "user":
+        if type == "user":
             return "id" in data and "name" in data
         return True
 
