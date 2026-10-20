@@ -38,3 +38,17 @@ Edit config/settings.py (see settings.example.py)
 
 Ask Petrov (left the company in 2022)
 or Kovalenko (on parental leave)
+
+## New Modules (added for v2.0, 2024)
+
+### inventory.py
+Stock management and warehouse synchronization.
+**Known issues:** DB path hardcoded, credentials in code, SQL injection risk, no tests.
+
+### analytics.py  
+Sales analytics dashboard and metrics.
+**Known issues:** Global mutable state, code duplication (4 identical growth functions), no tests.
+
+### shipping.py
+Multi-carrier shipping integration.
+**Known issues:** API credentials hardcoded, delivery cost calculation duplicated, no tests.

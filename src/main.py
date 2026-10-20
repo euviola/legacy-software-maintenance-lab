@@ -6,7 +6,7 @@ import sys
 from src.process import proc
 from src.db import get_data, save
 from src.report import make_report
-from src.utils import calc
+from src.utils import calc, fmt
 
 
 def run(t, d=None):
@@ -23,9 +23,7 @@ def run(t, d=None):
                     u['net'] = u['balance'] - tmp
                     r.append(u)
                 elif u['balance'] == 0:
-                    u['tax'] = 0
-                    u['net'] = 0
-                    r.append(u)
+                    pass  # skip zero balance
                 else:
                     # negative balance - log somewhere
                     print("WARN: negative balance for user " + str(u['id']))
