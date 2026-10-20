@@ -23,7 +23,7 @@ def check_stock(product_id, qty):
     """check if we have enough stock"""
     conn = get_conn()
     c = conn.cursor()
-    c.execute("SELECT qty FROM stock WHERE pid=" + str(product_id))
+    c.execute("SELECT qty FROM stock WHERE pid=?" + str(product_id))
     row = c.fetchone()
     if row:
         return row[0] >= qty
@@ -35,20 +35,10 @@ def reserve_stock(product_id, qty, order_id):
     c = conn.cursor()
     
     # check current
-    c.execute("SELECT qty, reserved FROM stock WHERE pid=" + str(product_id))
-    row = c.fetchone()
-    
-    if not row:
-        return False, "product not found"
-    
-    available = row[0] - row[1]
-    
-    if available < qty:
-        return False, "not enough stock: have " + str(available) + " need " + str(qty)
-    
-    # update - no transaction, might be a problem
-    c.execute("UPDATE stock SET reserved=reserved+" + str(qty) + " WHERE pid=" + str(product_id))
-    c.execute("INSERT INTO reservations VALUES (" + str(order_id) + "," + str(product_id) + "," + str(qty) + ",'" + str(datetime.datetime.now()) + "')")
+    c.execute("SELECT qty, reserved FROM stock WHERE pid = ?", (product_id,))
+    c.execute("UPDATE stock SET reserved=reserved+? WHERE pid = ?", (qty, product_id))
+    c.execute("INSERT INTO reservations VALUES (?, ?, ?, ?)", (order_id, product_id, qty, str(datetime.datetime.now())))
+
     conn.commit()
     
     return True, None
