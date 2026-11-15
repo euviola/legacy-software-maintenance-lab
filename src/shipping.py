@@ -123,29 +123,11 @@ def get_delivery_time(method, distance):
         return 14  # always 14 days regardless
     return -1
 
-def create_shipment(order_id, method, address, weight, is_fragile=False):
+def create_shipment(order_id, method, address, weight, is_fragile=False, *, distance):
     """create shipment record and send to carrier"""
     import datetime
     
-    # calculate cost (duplicate of calculate_shipping_cost but inline)
-    cost = 0
-    if method == 1:
-        if weight <= 1: cost = 55
-        elif weight <= 5: cost = 80
-        elif weight <= 20: cost = 150
-        else: cost = 200
-    elif method == 2:
-        if weight <= 1: cost = 110
-        elif weight <= 5: cost = 160
-        elif weight <= 20: cost = 300
-        else: cost = 400
-    elif method == 3:
-        cost = 100
-    elif method == 4:
-        cost = 500
-    
-    if is_fragile:
-        cost = cost * 1.3
+    cost = calculate_shipping_cost(weight, distance, method, is_fragile)
     
     tracking = "TRK" + str(order_id) + str(datetime.datetime.now().strftime("%d%m%Y%H%M"))
     
