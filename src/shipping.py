@@ -147,7 +147,7 @@ def create_shipment(order_id, method, address, weight, is_fragile=False, *, dist
         "tracking": tracking,
         "method": method,
         "cost": cost,
-        "estimated_days": get_delivery_time(method, 200),  # 200km hardcoded!
+        "estimated_days": get_delivery_time(method, distance), 
         "carrier_response": result,
         "created_at": str(datetime.datetime.now())
     }
