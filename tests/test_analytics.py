@@ -306,3 +306,48 @@ def test_top_products_do_not_mutate_input():
     snapshot = [dict(item) for item in ITEMS]
     analytics.get_top_products(ITEMS)
     assert ITEMS == snapshot
+
+
+# ---------- dashboard helpers (iteration 5) ----------
+
+def test_summarize_orders_helper():
+    summary = analytics._summarize_orders(ORDERS)
+    assert summary == {"revenue": 1700.0, "orders": 2, "tax": 340.0, "refunded": 100.0}
+
+
+def test_summarize_orders_empty():
+    assert analytics._summarize_orders([]) == {"revenue": 0, "orders": 0, "tax": 0, "refunded": 0}
+
+
+def test_count_users_by_role_helper():
+    assert analytics._count_users_by_role(USERS) == {
+        "premium": 2, "regular": 1, "other": 2, "total": 5}
+    assert analytics._count_users_by_role([]) == {
+        "premium": 0, "regular": 0, "other": 0, "total": 0}
+
+
+def test_metric_type_for_period_helper():
+    assert analytics._metric_type_for_period("daily") == analytics.Period.DAILY
+    assert analytics._metric_type_for_period("weekly") == analytics.Period.WEEKLY
+    assert analytics._metric_type_for_period("anything") == analytics.Period.WEEKLY
+
+
+def test_load_dashboard_data_helper():
+    with patch("src.db.get_data", side_effect=fake_get_data()):
+        orders, users = analytics._load_dashboard_data()
+    assert orders == ORDERS and users == USERS
+
+
+def test_run_order_processing_helper_calls_proc_once():
+    with patch("src.process.proc") as proc_mock:
+        analytics._run_order_processing()
+    assert proc_mock.call_count == 1
+
+
+def test_dashboard_is_an_orchestrator_over_helpers():
+    with patch.object(analytics, "_load_dashboard_data", return_value=(ORDERS, USERS)) as load, \
+         patch.object(analytics, "_run_order_processing") as run_proc:
+        result = analytics.generate_dashboard("weekly")
+    assert load.call_count == 1 and run_proc.call_count == 1
+    assert result["users"]["total"] == 5
+    assert result["total_orders"] == 2

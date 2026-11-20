@@ -1,7 +1,8 @@
-# analytics.py
-# Sales analytics and metrics calculation
-# Created: 2020-11-02. Refactored: never.
-# "Works fine, don't touch" - previous developer note
+"""Sales analytics: metrics, top products, growth ratios and the dashboard.
+
+Created: 2020-11-02. Reengineered in CR reengineering/analytics-module:
+public interface (function names, signatures, GLOBAL_STATS / GLOBAL_CACHE) is unchanged.
+"""
 
 from enum import IntEnum
 
@@ -177,66 +178,72 @@ def reset_stats():
     GLOBAL_STATS = _new_stats()
     GLOBAL_CACHE = {}
 
-def generate_dashboard(period="daily", category=None):
+
+def _load_dashboard_data():
+    """Fetch orders and users from the data layer."""
+    # imported lazily to keep the original import order (src.process uses the same data layer)
+    from src.db import get_data  # pylint: disable=import-outside-toplevel
+    return get_data("orders"), get_data("users")
+
+
+def _run_order_processing():
+    """Run the order processing flow.
+
+    The dashboard does not use its result, but proc() updates the shared
+    DataManager cache, so the call is kept to preserve behaviour.
     """
-    Main dashboard function.
-    Fetches data from multiple sources and calculates everything.
-    This function does WAY too much.
-    """
-    # import here to avoid circular imports - architectural problem
-    from src.db import get_data
-    from src.process import proc
-    
-    # get all data
-    orders = get_data("orders")
-    users = get_data("users") 
-    products = get_data("products")
-    
+    from src.process import proc  # pylint: disable=import-outside-toplevel
+    proc()
+
+
+def _summarize_orders(orders):
+    """Revenue, number of paid orders, tax and refunds."""
+    summary = {"revenue": 0, "orders": 0, "tax": 0, "refunded": 0}
+    for order in orders:
+        amount = order.get("amount", 0)
+        if order.get("status") == STATUS_PAID:
+            summary["revenue"] += amount
+            summary["orders"] += 1
+            summary["tax"] += amount * TAX_RATE
+        elif order.get("status") == STATUS_REFUNDED:
+            summary["refunded"] += amount
+    return summary
+
+
+def _count_users_by_role(users):
+    """Number of premium, regular and other users."""
+    premium = len([u for u in users if u.get("role") == ROLE_PREMIUM])
+    regular = len([u for u in users if u.get("role") == ROLE_REGULAR])
+    other = len([u for u in users if u.get("role") not in (ROLE_REGULAR, ROLE_PREMIUM)])
+    return {"premium": premium, "regular": regular, "other": other, "total": len(users)}
+
+
+def _metric_type_for_period(period):
+    """Dashboard period name -> calc_metrics type (anything but daily is weekly)."""
+    return Period.DAILY if period == PERIOD_DAILY_NAME else Period.WEEKLY
+
+
+def generate_dashboard(period=PERIOD_DAILY_NAME, category=None):
+    """Build the sales dashboard: load data, summarize orders, segment users, add metrics."""
+    orders, users = _load_dashboard_data()
+
     if not orders:
         return {"error": "no data", "code": ERROR_CODE_NO_DATA}
-    
-    # process everything
-    proc_result = proc()
-    
-    # calculate metrics manually (duplicating proc() logic)
-    total_revenue = 0
-    total_orders = 0
-    total_tax = 0
-    refunded = 0
-    
-    for o in orders:
-        if o.get("status") == STATUS_PAID:
-            total_revenue += o.get("amount", 0)
-            total_orders += 1
-            # hardcoded tax rate again
-            total_tax += o.get("amount", 0) * TAX_RATE
-        elif o.get("status") == STATUS_REFUNDED:
-            refunded += o.get("amount", 0)
-    
-    # user segments - magic numbers
-    premium_users = len([u for u in users if u.get("role") == ROLE_PREMIUM])
-    regular_users = len([u for u in users if u.get("role") == ROLE_REGULAR])
-    other_users = len([u for u in users if u.get("role") not in [ROLE_REGULAR, ROLE_PREMIUM]])
-    
-    top_prods = get_top_products(orders)
-    
-    code, metrics = calc_metrics(
-        orders, Period.DAILY if period == PERIOD_DAILY_NAME else Period.WEEKLY, category)
-    
+
+    _run_order_processing()
+
+    summary = _summarize_orders(orders)
+    _, metrics = calc_metrics(orders, _metric_type_for_period(period), category)
+
     return {
         "period": period,
-        "total_revenue": round(total_revenue, PRECISION),
-        "total_orders": total_orders,
-        "total_tax": round(total_tax, PRECISION),
-        "refunded": round(refunded, PRECISION),
-        "net_revenue": round(total_revenue - total_tax - refunded, PRECISION),
-        "users": {
-            "premium": premium_users,
-            "regular": regular_users,
-            "other": other_users,
-            "total": len(users)
-        },
-        "top_products": top_prods,
+        "total_revenue": round(summary["revenue"], PRECISION),
+        "total_orders": summary["orders"],
+        "total_tax": round(summary["tax"], PRECISION),
+        "refunded": round(summary["refunded"], PRECISION),
+        "net_revenue": round(summary["revenue"] - summary["tax"] - summary["refunded"], PRECISION),
+        "users": _count_users_by_role(users),
+        "top_products": get_top_products(orders),
         "metrics": metrics,
         "global_stats": GLOBAL_STATS
     }
