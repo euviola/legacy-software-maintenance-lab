@@ -233,3 +233,20 @@ def test_dashboard_with_default_test_data():
     assert result["total_orders"] == 2
     assert result["net_revenue"] == 1360.0
     assert result["users"] == {"premium": 4, "regular": 1, "other": 0, "total": 5}
+
+
+# ---------- constants (iteration 2) ----------
+
+def test_period_codes_are_backward_compatible():
+    assert [p.value for p in analytics.Period] == [1, 2, 3, 4]
+    for code in (1, 2, 3, 4):
+        assert analytics.calc_metrics(SALES, analytics.Period(code)) == \
+            analytics.calc_metrics(SALES, code)
+
+
+def test_named_constants_keep_legacy_values():
+    assert analytics.TAX_RATE == 0.2
+    assert (analytics.ROLE_REGULAR, analytics.ROLE_PREMIUM) == (2, 3)
+    assert (analytics.STATUS_PAID, analytics.STATUS_REFUNDED) == ("paid", "refunded")
+    assert analytics.CACHE_MODE == "cache"
+    assert analytics.DEFAULT_TOP_N == 10

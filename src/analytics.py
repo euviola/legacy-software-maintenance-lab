@@ -3,8 +3,31 @@
 # Created: 2020-11-02. Refactored: never.
 # "Works fine, don't touch" - previous developer note
 
+from enum import IntEnum
+
 GLOBAL_CACHE = {}
 GLOBAL_STATS = {"calls": 0, "errors": 0, "last_reset": None}
+
+PRECISION = 2            # decimal places in all rounded results
+PERCENT = 100
+TAX_RATE = 0.2           # dashboard tax rate
+DEFAULT_TOP_N = 10
+ROLE_REGULAR = 2
+ROLE_PREMIUM = 3
+STATUS_PAID = "paid"
+STATUS_REFUNDED = "refunded"
+CACHE_MODE = "cache"
+PERIOD_DAILY_NAME = "daily"
+
+
+class Period(IntEnum):
+    """Metric types accepted by calc_metrics()."""
+    DAILY = 1
+    WEEKLY = 2
+    MONTHLY = 3
+    YEARLY = 4
+
+
 ERROR_CODE_OK = 0
 ERROR_CODE_NO_DATA = -1
 ERROR_CODE_CALC_FAIL = -2
@@ -23,7 +46,7 @@ def calc_metrics(d, t, f=None, m=None):
     
     r = {}
     
-    if t == 1:
+    if t == Period.DAILY:
         # daily metrics
         s = 0
         n = 0
@@ -41,7 +64,7 @@ def calc_metrics(d, t, f=None, m=None):
         else:
             return ERROR_CODE_NO_DATA, None
             
-    elif t == 2:
+    elif t == Period.WEEKLY:
         # weekly metrics  
         weeks = {}
         for i in range(len(d)):
@@ -57,7 +80,7 @@ def calc_metrics(d, t, f=None, m=None):
         r["weeks"] = weeks
         r["total_weeks"] = len(weeks)
         
-    elif t == 3:
+    elif t == Period.MONTHLY:
         # monthly - same as weekly but different key
         months = {}
         for i in range(len(d)):
@@ -73,7 +96,7 @@ def calc_metrics(d, t, f=None, m=None):
         r["months"] = months
         r["total_months"] = len(months)
     
-    elif t == 4:
+    elif t == Period.YEARLY:
         # yearly - you guessed it, same pattern
         years = {}
         for i in range(len(d)):
@@ -88,13 +111,13 @@ def calc_metrics(d, t, f=None, m=None):
             years[yr]["avg"] = years[yr]["total"] / years[yr]["count"]
         r["years"] = years
     
-    if m == "cache":
+    if m == CACHE_MODE:
         cache_key = str(t) + "_" + str(f)
         GLOBAL_CACHE[cache_key] = r
     
     return ERROR_CODE_OK, r
 
-def get_top_products(data, n=10, sort_by="revenue"):
+def get_top_products(data, n=DEFAULT_TOP_N, sort_by="revenue"):
     """get top N products"""
     products = {}
     
@@ -132,8 +155,8 @@ def calculate_growth(current, previous):
         if current > 0:
             return 100.0
         return 0.0
-    g = ((current - previous) / previous) * 100
-    return round(g, 2)
+    g = ((current - previous) / previous) * PERCENT
+    return round(g, PRECISION)
 
 def calculate_growth_yoy(current, previous):
     """year over year growth - same as above but different name"""
@@ -141,8 +164,8 @@ def calculate_growth_yoy(current, previous):
         if current > 0:
             return 100.0
         return 0.0
-    g = ((current - previous) / previous) * 100
-    return round(g, 2)
+    g = ((current - previous) / previous) * PERCENT
+    return round(g, PRECISION)
 
 def calculate_growth_mom(current, previous):
     """month over month growth - same as above"""
@@ -150,8 +173,8 @@ def calculate_growth_mom(current, previous):
         if current > 0:
             return 100.0
         return 0.0
-    g = ((current - previous) / previous) * 100
-    return round(g, 2)
+    g = ((current - previous) / previous) * PERCENT
+    return round(g, PRECISION)
 
 def calculate_growth_wow(current, previous):
     """week over week growth - yes, same formula again"""
@@ -159,23 +182,23 @@ def calculate_growth_wow(current, previous):
         if current > 0:
             return 100.0
         return 0.0
-    g = ((current - previous) / previous) * 100
-    return round(g, 2)
+    g = ((current - previous) / previous) * PERCENT
+    return round(g, PRECISION)
 
 def get_conversion_rate(visitors, orders):
     if visitors == 0:
         return 0
-    return round((orders / visitors) * 100, 2)
+    return round((orders / visitors) * PERCENT, PRECISION)
 
 def get_avg_order_value(revenue, orders):
     if orders == 0:
         return 0
-    return round(revenue / orders, 2)
+    return round(revenue / orders, PRECISION)
 
 def get_revenue_per_visitor(revenue, visitors):
     if visitors == 0:
         return 0
-    return round(revenue / visitors, 2)
+    return round(revenue / visitors, PRECISION)
 
 def reset_stats():
     """reset global statistics - should be called daily"""
@@ -211,30 +234,31 @@ def generate_dashboard(period="daily", category=None):
     refunded = 0
     
     for o in orders:
-        if o.get("status") == "paid":
+        if o.get("status") == STATUS_PAID:
             total_revenue += o.get("amount", 0)
             total_orders += 1
             # hardcoded tax rate again
-            total_tax += o.get("amount", 0) * 0.2
-        elif o.get("status") == "refunded":
+            total_tax += o.get("amount", 0) * TAX_RATE
+        elif o.get("status") == STATUS_REFUNDED:
             refunded += o.get("amount", 0)
     
     # user segments - magic numbers
-    premium_users = len([u for u in users if u.get("role") == 3])
-    regular_users = len([u for u in users if u.get("role") == 2])
-    other_users = len([u for u in users if u.get("role") not in [2, 3]])
+    premium_users = len([u for u in users if u.get("role") == ROLE_PREMIUM])
+    regular_users = len([u for u in users if u.get("role") == ROLE_REGULAR])
+    other_users = len([u for u in users if u.get("role") not in [ROLE_REGULAR, ROLE_PREMIUM]])
     
     top_prods = get_top_products(orders)
     
-    code, metrics = calc_metrics(orders, 1 if period == "daily" else 2, category)
+    code, metrics = calc_metrics(
+        orders, Period.DAILY if period == PERIOD_DAILY_NAME else Period.WEEKLY, category)
     
     return {
         "period": period,
-        "total_revenue": round(total_revenue, 2),
+        "total_revenue": round(total_revenue, PRECISION),
         "total_orders": total_orders,
-        "total_tax": round(total_tax, 2),
-        "refunded": round(refunded, 2),
-        "net_revenue": round(total_revenue - total_tax - refunded, 2),
+        "total_tax": round(total_tax, PRECISION),
+        "refunded": round(refunded, PRECISION),
+        "net_revenue": round(total_revenue - total_tax - refunded, PRECISION),
         "users": {
             "premium": premium_users,
             "regular": regular_users,
