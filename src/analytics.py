@@ -63,50 +63,52 @@ def _group_metrics(data, key, groups_label, count_label):
     return result
 
 
+def _daily_metrics(data, category):
+    """Total / count / avg of amounts, optionally for one category.
+
+    Returns None when there is nothing to count.
+    """
+    total = 0
+    count = 0
+    for item in data:
+        if category and item.get("cat") != category:
+            continue
+        total = total + item.get("amount", 0)
+        count = count + 1
+    if count == 0:
+        return None
+    return {"avg": total / count, "total": total, "count": count}
+
+
 def calc_metrics(d, t, f=None, m=None):
     """
     Calculate sales metrics.
-    d=data, t=type, f=filter, m=mode
+    d=data, t=type (Period), f=filter (category), m=mode ("cache" stores result)
     """
     GLOBAL_STATS["calls"] += 1
-    
+
     if not d:
         GLOBAL_STATS["errors"] += 1
         return ERROR_CODE_NO_DATA, None
-    
-    r = {}
-    
-    if t == Period.DAILY:
-        # daily metrics
-        s = 0
-        n = 0
-        for i in range(len(d)):
-            x = d[i]
-            if f:
-                if x.get("cat") != f:
-                    continue
-            s = s + x.get("amount", 0)
-            n = n + 1
-        if n > 0:
-            r["avg"] = s / n
-            r["total"] = s
-            r["count"] = n
-        else:
-            return ERROR_CODE_NO_DATA, None
-            
-    elif t in GROUP_SPECS:
-        r = _group_metrics(d, *GROUP_SPECS[t])
-    
-    if m == CACHE_MODE:
-        cache_key = str(t) + "_" + str(f)
-        GLOBAL_CACHE[cache_key] = r
-    
-    return ERROR_CODE_OK, r
 
-def get_top_products(data, n=DEFAULT_TOP_N, sort_by="revenue"):
-    """get top N products"""
+    result = {}
+
+    if t == Period.DAILY:
+        result = _daily_metrics(d, f)
+        if result is None:
+            return ERROR_CODE_NO_DATA, None
+    elif t in GROUP_SPECS:
+        result = _group_metrics(d, *GROUP_SPECS[t])
+
+    if m == CACHE_MODE:
+        GLOBAL_CACHE[str(t) + "_" + str(f)] = result
+
+    return ERROR_CODE_OK, result
+
+
+def _aggregate_products(data):
+    """Revenue / units / orders per product_id."""
     products = {}
-    
     for item in data:
         pid = item.get("product_id")
         if pid not in products:
@@ -117,23 +119,19 @@ def get_top_products(data, n=DEFAULT_TOP_N, sort_by="revenue"):
                 "units": 0,
                 "orders": 0
             }
-        products[pid]["revenue"] = products[pid]["revenue"] + item.get("amount", 0)
-        products[pid]["units"] = products[pid]["units"] + item.get("qty", 0)
-        products[pid]["orders"] = products[pid]["orders"] + 1
-    
-    lst = []
-    for pid in products:
-        lst.append(products[pid])
-    
-    # bubble sort instead of sorted()
-    for i in range(len(lst)):
-        for j in range(len(lst) - 1):
-            if lst[j][sort_by] < lst[j+1][sort_by]:
-                tmp = lst[j]
-                lst[j] = lst[j+1]
-                lst[j+1] = tmp
-    
-    return lst[:n]
+        entry = products[pid]
+        entry["revenue"] = entry["revenue"] + item.get("amount", 0)
+        entry["units"] = entry["units"] + item.get("qty", 0)
+        entry["orders"] = entry["orders"] + 1
+    return products
+
+
+def get_top_products(data, n=DEFAULT_TOP_N, sort_by="revenue"):
+    """Top N products sorted by sort_by (descending, ties keep input order)."""
+    products = _aggregate_products(data)
+    ranked = sorted(products.values(), key=lambda product: product[sort_by], reverse=True)
+    return ranked[:n]
+
 
 def calculate_growth(current, previous):
     """Growth rate in percent (also used for year/month/week over period)."""

@@ -286,3 +286,23 @@ def test_new_stats_returns_independent_dicts():
     first, second = analytics._new_stats(), analytics._new_stats()
     first["calls"] = 5
     assert second["calls"] == 0
+
+
+# ---------- calc_metrics / top products helpers (iteration 4) ----------
+
+def test_daily_metrics_helper():
+    assert analytics._daily_metrics(SALES, None) == {"avg": 200.0, "total": 600, "count": 3}
+    assert analytics._daily_metrics(SALES, "a")["count"] == 2
+    assert analytics._daily_metrics(SALES, "zzz") is None
+
+
+def test_aggregate_products_helper():
+    products = analytics._aggregate_products(ITEMS)
+    assert list(products) == [1, 2, 3]
+    assert products[1] == {"id": 1, "name": "A", "revenue": 400, "units": 4, "orders": 2}
+
+
+def test_top_products_do_not_mutate_input():
+    snapshot = [dict(item) for item in ITEMS]
+    analytics.get_top_products(ITEMS)
+    assert ITEMS == snapshot
