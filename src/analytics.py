@@ -6,7 +6,14 @@
 from enum import IntEnum
 
 GLOBAL_CACHE = {}
-GLOBAL_STATS = {"calls": 0, "errors": 0, "last_reset": None}
+
+
+def _new_stats():
+    """Fresh statistics dict."""
+    return {"calls": 0, "errors": 0, "last_reset": None}
+
+
+GLOBAL_STATS = _new_stats()
 
 PRECISION = 2            # decimal places in all rounded results
 PERCENT = 100
@@ -32,6 +39,29 @@ ERROR_CODE_OK = 0
 ERROR_CODE_NO_DATA = -1
 ERROR_CODE_CALC_FAIL = -2
 ERROR_CODE_DB_FAIL = -3
+
+# group key in data, result key for groups, result key for number of groups
+GROUP_SPECS = {
+    Period.WEEKLY: ("week", "weeks", "total_weeks"),
+    Period.MONTHLY: ("month", "months", "total_months"),
+    Period.YEARLY: ("year", "years", None),
+}
+
+
+def _group_metrics(data, key, groups_label, count_label):
+    """Total / count / avg of amounts grouped by data[key]."""
+    groups = {}
+    for item in data:
+        group = groups.setdefault(item.get(key, 0), {"total": 0, "count": 0})
+        group["total"] = group["total"] + item.get("amount", 0)
+        group["count"] = group["count"] + 1
+    for group in groups.values():
+        group["avg"] = group["total"] / group["count"]
+    result = {groups_label: groups}
+    if count_label:
+        result[count_label] = len(groups)
+    return result
+
 
 def calc_metrics(d, t, f=None, m=None):
     """
@@ -64,52 +94,8 @@ def calc_metrics(d, t, f=None, m=None):
         else:
             return ERROR_CODE_NO_DATA, None
             
-    elif t == Period.WEEKLY:
-        # weekly metrics  
-        weeks = {}
-        for i in range(len(d)):
-            x = d[i]
-            w = x.get("week", 0)
-            if w not in weeks:
-                weeks[w] = {"total": 0, "count": 0}
-            weeks[w]["total"] = weeks[w]["total"] + x.get("amount", 0)
-            weeks[w]["count"] = weeks[w]["count"] + 1
-        
-        for w in weeks:
-            weeks[w]["avg"] = weeks[w]["total"] / weeks[w]["count"]
-        r["weeks"] = weeks
-        r["total_weeks"] = len(weeks)
-        
-    elif t == Period.MONTHLY:
-        # monthly - same as weekly but different key
-        months = {}
-        for i in range(len(d)):
-            x = d[i]
-            mth = x.get("month", 0)
-            if mth not in months:
-                months[mth] = {"total": 0, "count": 0}
-            months[mth]["total"] = months[mth]["total"] + x.get("amount", 0)
-            months[mth]["count"] = months[mth]["count"] + 1
-        
-        for mth in months:
-            months[mth]["avg"] = months[mth]["total"] / months[mth]["count"]
-        r["months"] = months
-        r["total_months"] = len(months)
-    
-    elif t == Period.YEARLY:
-        # yearly - you guessed it, same pattern
-        years = {}
-        for i in range(len(d)):
-            x = d[i]
-            yr = x.get("year", 0)
-            if yr not in years:
-                years[yr] = {"total": 0, "count": 0}
-            years[yr]["total"] = years[yr]["total"] + x.get("amount", 0)
-            years[yr]["count"] = years[yr]["count"] + 1
-        
-        for yr in years:
-            years[yr]["avg"] = years[yr]["total"] / years[yr]["count"]
-        r["years"] = years
+    elif t in GROUP_SPECS:
+        r = _group_metrics(d, *GROUP_SPECS[t])
     
     if m == CACHE_MODE:
         cache_key = str(t) + "_" + str(f)
@@ -150,7 +136,7 @@ def get_top_products(data, n=DEFAULT_TOP_N, sort_by="revenue"):
     return lst[:n]
 
 def calculate_growth(current, previous):
-    """growth rate calculation"""
+    """Growth rate in percent (also used for year/month/week over period)."""
     if previous == 0:
         if current > 0:
             return 100.0
@@ -158,52 +144,39 @@ def calculate_growth(current, previous):
     g = ((current - previous) / previous) * PERCENT
     return round(g, PRECISION)
 
-def calculate_growth_yoy(current, previous):
-    """year over year growth - same as above but different name"""
-    if previous == 0:
-        if current > 0:
-            return 100.0
-        return 0.0
-    g = ((current - previous) / previous) * PERCENT
-    return round(g, PRECISION)
 
-def calculate_growth_mom(current, previous):
-    """month over month growth - same as above"""
-    if previous == 0:
-        if current > 0:
-            return 100.0
-        return 0.0
-    g = ((current - previous) / previous) * PERCENT
-    return round(g, PRECISION)
+# backward compatibility: the same calculation under the old names
+calculate_growth_yoy = calculate_growth
+calculate_growth_mom = calculate_growth
+calculate_growth_wow = calculate_growth
 
-def calculate_growth_wow(current, previous):
-    """week over week growth - yes, same formula again"""
-    if previous == 0:
-        if current > 0:
-            return 100.0
-        return 0.0
-    g = ((current - previous) / previous) * PERCENT
-    return round(g, PRECISION)
+
+def _ratio(numerator, denominator, scale=1):
+    """Rounded numerator / denominator * scale, 0 if denominator is 0."""
+    if denominator == 0:
+        return 0
+    return round((numerator / denominator) * scale, PRECISION)
+
 
 def get_conversion_rate(visitors, orders):
-    if visitors == 0:
-        return 0
-    return round((orders / visitors) * PERCENT, PRECISION)
+    """Share of visitors who ordered, in percent."""
+    return _ratio(orders, visitors, PERCENT)
+
 
 def get_avg_order_value(revenue, orders):
-    if orders == 0:
-        return 0
-    return round(revenue / orders, PRECISION)
+    """Average revenue per order."""
+    return _ratio(revenue, orders)
+
 
 def get_revenue_per_visitor(revenue, visitors):
-    if visitors == 0:
-        return 0
-    return round(revenue / visitors, PRECISION)
+    """Average revenue per visitor."""
+    return _ratio(revenue, visitors)
+
 
 def reset_stats():
     """reset global statistics - should be called daily"""
     global GLOBAL_STATS, GLOBAL_CACHE
-    GLOBAL_STATS = {"calls": 0, "errors": 0, "last_reset": None}
+    GLOBAL_STATS = _new_stats()
     GLOBAL_CACHE = {}
 
 def generate_dashboard(period="daily", category=None):

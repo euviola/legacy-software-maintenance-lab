@@ -250,3 +250,39 @@ def test_named_constants_keep_legacy_values():
     assert (analytics.STATUS_PAID, analytics.STATUS_REFUNDED) == ("paid", "refunded")
     assert analytics.CACHE_MODE == "cache"
     assert analytics.DEFAULT_TOP_N == 10
+
+
+# ---------- consolidated helpers (iteration 3) ----------
+
+def test_group_metrics_helper_with_count_label():
+    result = analytics._group_metrics(SALES, "week", "weeks", "total_weeks")
+    assert result["total_weeks"] == 2
+    assert result["weeks"][1] == {"total": 300, "count": 2, "avg": 150.0}
+
+
+def test_group_metrics_helper_without_count_label():
+    result = analytics._group_metrics(SALES, "year", "years", None)
+    assert list(result) == ["years"]
+
+
+def test_group_specs_cover_all_grouped_periods():
+    assert set(analytics.GROUP_SPECS) == {
+        analytics.Period.WEEKLY, analytics.Period.MONTHLY, analytics.Period.YEARLY}
+
+
+def test_growth_aliases_share_one_implementation():
+    assert analytics.calculate_growth_yoy is analytics.calculate_growth
+    assert analytics.calculate_growth_mom is analytics.calculate_growth
+    assert analytics.calculate_growth_wow is analytics.calculate_growth
+
+
+def test_ratio_helper_scale_and_zero_denominator():
+    assert analytics._ratio(1, 3) == 0.33
+    assert analytics._ratio(1, 4, 100) == 25.0
+    assert analytics._ratio(1, 0, 100) == 0
+
+
+def test_new_stats_returns_independent_dicts():
+    first, second = analytics._new_stats(), analytics._new_stats()
+    first["calls"] = 5
+    assert second["calls"] == 0
